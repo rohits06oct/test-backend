@@ -55,7 +55,7 @@ const memoryRateLimit = new Map();
 const memoryDuplicates = new Map();
 
 app.use(cors({
-    origin: ['https://tinybigtalks.online', 'http://localhost:5500', 'http://127.0.0.1:5500'], // Allow production and common local dev ports
+    origin: ['https://tinybigtalks.online', 'https://rohits06oct.github.io', 'http://localhost:5500', 'http://127.0.0.1:5500'], // Allow production and common local dev ports
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type']
 }));
