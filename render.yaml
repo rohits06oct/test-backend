@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: test-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: DATABASE_URL
+        sync: false # Set this in the Render dashboard
+      - key: NODE_VERSION
+        value: 18
