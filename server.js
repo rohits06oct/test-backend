@@ -66,6 +66,39 @@ app.use(bodyParser.json());
 const normalizeComment = (text) => text.trim().toLowerCase().replace(/\s+/g, ' ');
 const generateHash = (text) => crypto.createHash('sha256').update(text).digest('hex');
 
+// Utility: Refresh Comments Cache
+const refreshCommentsCache = async (id_article) => {
+    const cacheKey = `cache:${id_article}`;
+    try {
+        const { rows } = await pool.query(
+            `SELECT comment, created_at, status 
+             FROM public.comments 
+             WHERE id_article = $1 AND status = 'approved' 
+             ORDER BY created_at DESC`,
+            [id_article]
+        );
+
+        const comments = rows.map(r => ({
+            comment: r.comment,
+            created_at: Math.floor(new Date(r.created_at).getTime() / 1000),
+            status: r.status
+        }));
+
+        const cacheData = JSON.stringify(comments);
+        const expiry = 3600; // 1 hour
+
+        if (isRedisAvailable) {
+            await redis.set(cacheKey, cacheData, 'EX', expiry);
+        } else {
+            memoryCache.set(cacheKey, { value: cacheData, expires: Date.now() + (expiry * 1000) });
+        }
+        return comments;
+    } catch (error) {
+        console.error(`[CACHE] Error refreshing cache for ${id_article}:`, error);
+        return null;
+    }
+};
+
 // POST: Add Comment
 app.post('/api/comments', async (req, res) => {
     const {
@@ -191,7 +224,7 @@ app.post('/api/comments', async (req, res) => {
             ]
         );
 
-        // 4. Update Redis/Memory State
+        // 4. Update Redis/Memory State & Proactive Cache Refresh
         const tenMins = 600 * 1000;
         const fiveMins = 300 * 1000;
 
@@ -202,13 +235,14 @@ app.post('/api/comments', async (req, res) => {
                 await redis.incr(rateLimitKey);
             }
             await redis.set(dupKey, '1', 'EX', 300);
-            await redis.del(`cache:${id_article}`);
         } else {
             const newCount = (parseInt(currentCount) || 0) + 1;
             memoryRateLimit.set(rateLimitKey, { value: newCount, expires: Date.now() + tenMins });
             memoryDuplicates.set(dupKey, { value: '1', expires: Date.now() + fiveMins });
-            memoryCache.delete(`cache:${id_article}`);
         }
+
+        // Proactively refresh the comments cache
+        await refreshCommentsCache(id_article);
 
         return res.json({ message: 'Comment posted successfully', status: 'approved' });
 
@@ -238,26 +272,11 @@ app.get('/api/comments/:id_article', async (req, res) => {
             return res.json({ id_article, comments: JSON.parse(cachedData) });
         }
 
-        // 2. Fetch from Neon
-        const { rows } = await pool.query(
-            `SELECT comment, created_at, status 
-             FROM public.comments 
-             WHERE id_article = $1 AND status = 'approved' 
-             ORDER BY created_at DESC`,
-            [id_article]
-        );
-
-        const comments = rows.map(r => ({
-            comment: r.comment,
-            created_at: Math.floor(new Date(r.created_at).getTime() / 1000), // Convert to unix seconds for frontend compatibility
-            status: r.status
-        }));
-
-        // 3. Cache results
-        if (isRedisAvailable) {
-            await redis.set(cacheKey, JSON.stringify(comments), 'EX', 3600);
-        } else {
-            memoryCache.set(cacheKey, { value: JSON.stringify(comments), expires: Date.now() + 3600000 });
+        // 2. Cache Miss: Fetch and Refresh
+        const comments = await refreshCommentsCache(id_article);
+        
+        if (comments === null) {
+            throw new Error('Failed to fetch/cache comments');
         }
 
         return res.json({ id_article, comments });
