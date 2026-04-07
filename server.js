@@ -53,6 +53,7 @@ initRedis();
 const memoryCache = new Map();
 const memoryRateLimit = new Map();
 const memoryDuplicates = new Map();
+const memoryErrorLimit = new Map();
 
 app.use(cors({
     origin: ['https://tinybigtalks.online', 'http://localhost:5500', 'http://127.0.0.1:5500'], // Allow production and common local dev ports
@@ -68,15 +69,74 @@ const generateHash = (text) => crypto.createHash('sha256').update(text).digest('
 // POST: Add Comment
 app.post('/api/comments', async (req, res) => {
     const { 
-        id_article, comment, user_ip, session_id, user_city, cookie_id,
-        user_agent, browser_lang, device_type, referrer, page_url, screen_res 
+        id_article, comment, user_ip, session_id, 
+        user_agent, browser_lang, device_type, referrer, screen_res 
     } = req.body;
     
     if (!id_article || !comment || !user_ip) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    const errorLimitKey = `error:limit:${user_ip}`;
+    const blockKey = `error:block:${user_ip}`;
+
+    // Incrementor and Blocker Utility
+    const handleFailure = async () => {
+        let count;
+        if (isRedisAvailable) {
+            count = await redis.incr(errorLimitKey);
+            if (count === 1) await redis.expire(errorLimitKey, 1800);
+            if (count >= 10) {
+                await redis.set(blockKey, '1', 'EX', 1800);
+            }
+        } else {
+            const entry = memoryErrorLimit.get(errorLimitKey) || { value: 0, expires: Date.now() + 1800000 };
+            entry.value += 1;
+            memoryErrorLimit.set(errorLimitKey, entry);
+            if (entry.value >= 10) {
+                memoryErrorLimit.set(blockKey, { value: '1', expires: Date.now() + 1800000 });
+            }
+        }
+    };
+
     try {
+        // Phase 1: Block Check
+        let isBlocked;
+        if (isRedisAvailable) {
+            isBlocked = await redis.get(blockKey);
+        } else {
+            const entry = memoryErrorLimit.get(blockKey);
+            if (entry && entry.expires > Date.now()) isBlocked = '1';
+        }
+
+        if (isBlocked) {
+            return res.status(403).json({ error: "You have blocked for 1 month" });
+        }
+
+        // Phase 2: Security Checks
+        // 1. Length Check
+        if (comment.length > 700) {
+            await handleFailure();
+            return res.status(400).json({ error: "Comment length cannot exceed 700 characters" });
+        }
+
+        // 2. Keyword Filter
+        const lowerComment = comment.toLowerCase();
+        const forbiddenWords = ['sex', 'xxx', 'adult', 'www'];
+        if (forbiddenWords.some(word => lowerComment.includes(word))) {
+            await handleFailure();
+            return res.status(400).json({ error: "You are tyring to provide adult and wrong words" });
+        }
+
+        // 3. Character Validation
+        // Allowed: alphabets, numbers, ., | and spaces/newlines
+        const allowedRegex = /^[a-zA-Z0-9.,| \n\r]+$/;
+        if (!allowedRegex.test(comment)) {
+            await handleFailure();
+            return res.status(400).json({ error: "Only allowed alphabets, numbers and special charchters like .,|" });
+        }
+
+        // Phase 3: Existing Rate Limiting & Logic
         // 1. Rate Limiting (4 comments / 10 mins)
         const rateLimitKey = `limit:${user_ip}`;
         let currentCount;
@@ -119,14 +179,14 @@ app.post('/api/comments', async (req, res) => {
         // 3. PostgreSQL Insertion
         await pool.query(
             `INSERT INTO public.comments (
-                id_article, comment, status, user_ip, user_city, session_id, 
-                cookie_id, user_agent, browser_lang, device_type, referrer, 
-                page_url, screen_res
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                id_article, comment, status, user_ip, session_id, 
+                user_agent, browser_lang, device_type, referrer, 
+                screen_res
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [
-                id_article, comment, 'approved', user_ip, user_city || 'unknown',
-                session_id, cookie_id, user_agent || 'unknown', browser_lang || 'unknown',
-                device_type || 'unknown', referrer || 'none', page_url || 'unknown',
+                id_article, comment, 'approved', user_ip,
+                session_id, user_agent || 'unknown', browser_lang || 'unknown',
+                device_type || 'unknown', referrer || 'none',
                 screen_res || 'unknown'
             ]
         );
@@ -154,6 +214,7 @@ app.post('/api/comments', async (req, res) => {
 
     } catch (error) {
         console.error('Error processing comment:', error);
+        await handleFailure();
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
