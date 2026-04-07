@@ -56,7 +56,7 @@ const memoryDuplicates = new Map();
 const memoryErrorLimit = new Map();
 
 app.use(cors({
-    origin: ['https://tinybigtalks.online', 'http://localhost:5500', 'http://127.0.0.1:5500'], // Allow production and common local dev ports
+    origin: ['https://tinybigtalks.online', 'https://www.racenews.online', 'https://www.golfreport.online', 'https://www.cricketreport.online', 'https://www.footballreport.online', 'https://www.techreport.online', 'https://www.eodreport.online', 'https://www.financereport.online', 'https://rohits06oct.github.io', 'http://localhost:5500', 'http://127.0.0.1:5500'], // Allow production and common local dev ports
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type']
 }));
@@ -68,11 +68,11 @@ const generateHash = (text) => crypto.createHash('sha256').update(text).digest('
 
 // POST: Add Comment
 app.post('/api/comments', async (req, res) => {
-    const { 
-        id_article, comment, user_ip, session_id, 
-        user_agent, browser_lang, device_type, referrer, screen_res 
+    const {
+        id_article, comment, user_ip, session_id,
+        user_agent, browser_lang, device_type, referrer, screen_res
     } = req.body;
-    
+
     if (!id_article || !comment || !user_ip) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -140,14 +140,14 @@ app.post('/api/comments', async (req, res) => {
         // 1. Rate Limiting (4 comments / 10 mins)
         const rateLimitKey = `limit:${user_ip}`;
         let currentCount;
-        
+
         if (isRedisAvailable) {
             currentCount = await redis.get(rateLimitKey);
         } else {
             const entry = memoryRateLimit.get(rateLimitKey);
             if (entry && entry.expires > Date.now()) currentCount = entry.value;
         }
-        
+
         if (currentCount && parseInt(currentCount) >= 4) {
             let remainingSeconds = 600;
             if (isRedisAvailable) {
@@ -163,7 +163,7 @@ app.post('/api/comments', async (req, res) => {
         const normalized = normalizeComment(comment);
         const hash = generateHash(normalized);
         const dupKey = `dup:${id_article}:${user_ip}:${hash}`;
-        
+
         let isDuplicate;
         if (isRedisAvailable) {
             isDuplicate = await redis.get(dupKey);
@@ -237,7 +237,7 @@ app.get('/api/comments/:id_article', async (req, res) => {
         if (cachedData) {
             return res.json({ id_article, comments: JSON.parse(cachedData) });
         }
-        
+
         // 2. Fetch from Neon
         const { rows } = await pool.query(
             `SELECT comment, created_at, status 
