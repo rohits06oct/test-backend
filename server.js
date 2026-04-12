@@ -56,7 +56,7 @@ const memoryDuplicates = new Map();
 const memoryErrorLimit = new Map();
 
 app.use(cors({
-    origin: ['https://www.tinybigtalks.online/', 'https://www.racenews.online/', 'https://www.golfreport.online/', 'https://www.cricketreport.online/', 'https://www.footballreport.online/', 'https://www.techreport.online/', 'https://www.eodreport.online/', 'https://www.financereport.online/', 'https://rohits06oct.github.io/', 'http://localhost:5500', 'http://127.0.0.1:5500'], // Allow production and common local dev ports
+    origin: ['https://www.tinybigtalks.online', 'https://www.racenews.online', 'https://www.golfreport.online', 'https://www.cricketreport.online', 'https://www.footballreport.online', 'https://www.techreport.online', 'https://www.eodreport.online', 'https://www.financereport.online', 'https://rohits06oct.github.io', 'http://localhost:5500', 'http://127.0.0.1:5500'], // Allow production and common local dev ports
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type']
 }));
