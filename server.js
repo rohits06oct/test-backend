@@ -56,9 +56,22 @@ const memoryDuplicates = new Map();
 const memoryErrorLimit = new Map();
 
 app.use(cors({
-    origin: ['https://www.tinybigtalks.online', 'https://www.racenews.online', 'https://www.golfreport.online', 'https://www.cricketreport.online', 'https://www.footballreport.online', 'https://www.techreport.online', 'https://www.eodreport.online', 'https://www.financereport.online', 'https://rohits06oct.github.io', 'http://localhost:5500', 'http://127.0.0.1:5500'], // Allow production and common local dev ports
+    origin: [
+        'https://www.tinybigtalks.online', 'https://tinybigtalks.online',
+        'https://www.racenews.online', 'https://racenews.online',
+        'https://www.golfreport.online', 'https://golfreport.online',
+        'https://www.cricketreport.online', 'https://cricketreport.online',
+        'https://www.footballreport.online', 'https://footballreport.online',
+        'https://www.techreport.online', 'https://techreport.online',
+        'https://www.eodreport.online', 'https://eodreport.online',
+        'https://www.financereport.online', 'https://financereport.online',
+        'https://rohits06oct.github.io',
+        'http://localhost:5500', 'http://127.0.0.1:5500',
+        'http://localhost:8000', 'http://127.0.0.1:8000',
+        'http://localhost:3000', 'http://127.0.0.1:3000'
+    ],
     methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type']
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(bodyParser.json());
 
@@ -274,7 +287,7 @@ app.get('/api/comments/:id_article', async (req, res) => {
 
         // 2. Cache Miss: Fetch and Refresh
         const comments = await refreshCommentsCache(id_article);
-        
+
         if (comments === null) {
             throw new Error('Failed to fetch/cache comments');
         }
