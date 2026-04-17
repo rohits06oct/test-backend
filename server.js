@@ -7,9 +7,15 @@ const { Pool } = require('pg');
 const crypto = require('crypto');
 const stringSimilarity = require('string-similarity');
 const path = require('path');
+const compression = require("compression");
+const helmet = require("helmet");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+app.disable("x-powered-by");
+app.use(helmet());
+app.use(compression());
 
 // PostgreSQL Pool setup
 const pool = new Pool({
@@ -54,6 +60,15 @@ const memoryCache = new Map();
 const memoryRateLimit = new Map();
 const memoryDuplicates = new Map();
 const memoryErrorLimit = new Map();
+
+app.use((req, res, next) => {
+    res.setHeader("Content-Security-Policy", "default-src 'self' https: data:;");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+    next();
+});
 
 app.use(cors({
     origin: [
